@@ -8,6 +8,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export class GeminiService {
   constructor(apiKey) {
     this.genAI = new GoogleGenerativeAI(apiKey);
+    // Try gemini-pro which is the stable model
     this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
     
     // System prompt for medical context
@@ -48,15 +49,8 @@ Important guidelines:
         prompt = `${this.systemContext}\n\nUser: ${prompt}`;
       }
 
-      const chat = this.model.startChat({
-        history: this.conversationHistory,
-        generationConfig: {
-          maxOutputTokens: 1000,
-          temperature: 0.7,
-        },
-      });
-
-      const result = await chat.sendMessage(prompt);
+      // Use generateContent instead of chat for better compatibility
+      const result = await this.model.generateContent(prompt);
       const response = result.response.text();
 
       // Update conversation history
