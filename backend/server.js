@@ -233,6 +233,15 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
+    // Check if API key is available
+    if (!process.env.GEMINI_API_KEY) {
+      console.error('GEMINI_API_KEY is not set in environment variables');
+      return res.status(500).json({
+        success: false,
+        error: 'Gemini API key is not configured'
+      });
+    }
+
     // Get or create chat session
     const sid = sessionId || uuidv4();
     let session = chatSessions.get(sid);
@@ -251,7 +260,9 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
+    console.log(`💬 Processing chat message: "${message.substring(0, 50)}..."`);
     const response = await session.chat(message, analysisContext);
+    console.log(`✅ Chat response generated successfully`);
 
     res.json({
       success: true,
@@ -261,9 +272,11 @@ app.post('/api/chat', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('❌ Chat endpoint error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message || 'Failed to get response from AI assistant'
     });
   }
 });

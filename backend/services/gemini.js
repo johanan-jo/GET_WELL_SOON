@@ -79,8 +79,13 @@ Important guidelines:
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('Gemini chat error:', error);
-      throw new Error('Failed to get response from AI assistant');
+      console.error('❌ Gemini chat error:', error);
+      console.error('Error details:', error.message);
+      console.error('Error stack:', error.stack);
+      if (error.response) {
+        console.error('API response:', error.response);
+      }
+      throw new Error(`Failed to get response from AI assistant: ${error.message}`);
     }
   }
 
