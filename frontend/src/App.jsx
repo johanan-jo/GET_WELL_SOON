@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage';
 import AnalyzePage from './pages/AnalyzePage';
 import HistoryPage from './pages/HistoryPage';
 import ResultsPage from './pages/ResultsPage';
+import ChatBot from './components/ChatBot';
 
 function App() {
   const [currentAnalysis, setCurrentAnalysis] = useState(null);
@@ -81,6 +82,9 @@ function App() {
             </div>
           </div>
         </footer>
+
+        {/* AI Chatbot */}
+        <ChatBot analysisId={currentAnalysis?.analysisId} />
       </div>
     </Router>
   );

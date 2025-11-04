@@ -1,11 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
+import dotenv from 'dotenv';
 import { DiagnosticAnalyzer } from './services/analyzer.js';
+import { GeminiService } from './services/gemini.js';
 import { normalRanges } from './data/normalRanges.js';
 
+// Load environment variables
+dotenv.config();
+
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
@@ -15,8 +20,12 @@ app.use(express.json());
 const patients = new Map();
 const analysisHistory = new Map();
 
-// Initialize analyzer
+// Initialize services
 const analyzer = new DiagnosticAnalyzer();
+const geminiService = new GeminiService(process.env.GEMINI_API_KEY);
+
+// Store chat sessions
+const chatSessions = new Map();
 
 // ============ API ENDPOINTS ============
 
@@ -206,6 +215,233 @@ app.get('/api/stats', (req, res) => {
       lastAnalysisAt: recentAnalyses[0]?.createdAt || null
     }
   });
+});
+
+// ============ GEMINI AI CHATBOT ENDPOINTS ============
+
+/**
+ * POST /api/chat - Chat with AI assistant
+ */
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, sessionId, analysisId } = req.body;
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message is required'
+      });
+    }
+
+    // Get or create chat session
+    const sid = sessionId || uuidv4();
+    let session = chatSessions.get(sid);
+    
+    if (!session) {
+      session = new GeminiService(process.env.GEMINI_API_KEY);
+      chatSessions.set(sid, session);
+    }
+
+    // Get analysis context if provided
+    let analysisContext = null;
+    if (analysisId) {
+      const analysis = analysisHistory.get(analysisId);
+      if (analysis) {
+        analysisContext = analysis.analysis;
+      }
+    }
+
+    const response = await session.chat(message, analysisContext);
+
+    res.json({
+      success: true,
+      data: {
+        ...response,
+        sessionId: sid
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/analyze-symptoms - Analyze symptoms with AI
+ */
+app.post('/api/analyze-symptoms', async (req, res) => {
+  try {
+    const { symptoms } = req.body;
+
+    if (!symptoms || !Array.isArray(symptoms) || symptoms.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Symptoms array is required'
+      });
+    }
+
+    const analysis = await geminiService.analyzeSymptoms(symptoms);
+
+    res.json({
+      success: true,
+      data: analysis
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/explain-test - Explain test results in simple terms
+ */
+app.post('/api/explain-test', async (req, res) => {
+  try {
+    const { testName, value, normalRange, status } = req.body;
+
+    if (!testName || !value || !normalRange || !status) {
+      return res.status(400).json({
+        success: false,
+        error: 'Test name, value, normal range, and status are required'
+      });
+    }
+
+    const explanation = await geminiService.explainTestResults(
+      testName,
+      value,
+      normalRange,
+      status
+    );
+
+    res.json({
+      success: true,
+      data: explanation
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/health-recommendations - Get AI health recommendations
+ */
+app.post('/api/health-recommendations', async (req, res) => {
+  try {
+    const { analysisId } = req.body;
+
+    if (!analysisId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Analysis ID is required'
+      });
+    }
+
+    const analysis = analysisHistory.get(analysisId);
+    
+    if (!analysis) {
+      return res.status(404).json({
+        success: false,
+        error: 'Analysis not found'
+      });
+    }
+
+    const recommendations = await geminiService.getHealthRecommendations(
+      analysis.analysis
+    );
+
+    res.json({
+      success: true,
+      data: recommendations
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/ask-health-question - Ask general health question
+ */
+app.post('/api/ask-health-question', async (req, res) => {
+  try {
+    const { question } = req.body;
+
+    if (!question) {
+      return res.status(400).json({
+        success: false,
+        error: 'Question is required'
+      });
+    }
+
+    const answer = await geminiService.answerHealthQuestion(question);
+
+    res.json({
+      success: true,
+      data: answer
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/simplify-medical-info - Simplify medical information
+ */
+app.post('/api/simplify-medical-info', async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Text is required'
+      });
+    }
+
+    const simplified = await geminiService.simplifyMedicalInfo(text);
+
+    res.json({
+      success: true,
+      data: simplified
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/chat/:sessionId - Clear chat session
+ */
+app.delete('/api/chat/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  
+  if (chatSessions.has(sessionId)) {
+    chatSessions.delete(sessionId);
+    res.json({
+      success: true,
+      message: 'Chat session cleared'
+    });
+  } else {
+    res.status(404).json({
+      success: false,
+      error: 'Session not found'
+    });
+  }
 });
 
 // Start server
